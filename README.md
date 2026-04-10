@@ -1,5 +1,7 @@
 # gatech-cs7643 final project
 
+This is our final project, reproducing the paper at `original-paper.pdf`, "Perspective-Aware Teaching: Adapting Knowledge for Heterogeneous Distillation". The code for the paper is the `PAT` submodule.
+
 ## Git LFS
 
 This repo uses [Git LFS](https://git-lfs.com/) to store large files (model weights, datasets, etc.).
