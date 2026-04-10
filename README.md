@@ -94,7 +94,7 @@ The `.python-version` file pins the project to Python 3.10.15. With pyenv config
 pyenv install 3.10.15   # skip if already installed
 ```
 
-pyenv will automatically activate 3.10.15 when you `cd` into this directory.
+pyenv will automatically activate 3.10.15 when you run `python` in this directory.
 
 ### Create and activate a virtual environment
 
