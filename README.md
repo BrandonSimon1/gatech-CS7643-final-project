@@ -183,9 +183,11 @@ python -m pytest test_train_student.py -v
 
 Both training pipelines include SLURM scripts for the Georgia Tech PACE cluster. Each training run is submitted as a separate job (one model per job) to avoid losing progress if a single run fails.
 
+The PAT SLURM scripts live at the **repo root** (in `slurm/`) — not inside the PAT submodule — so changes to them stay in our own repo rather than dirtying the submodule. The scripts `cd` into `PAT/` before launching training.
+
 ### SLURM Configuration
 
-Both `PAT/slurm/job.sh` and `standalone_training/slurm/job.sh` request the following resources per job:
+Both `slurm/job.sh` (PAT) and `standalone_training/slurm/job.sh` request the following resources per job:
 
 | Resource | Value |
 |----------|-------|
@@ -207,9 +209,9 @@ Before submitting, uncomment and edit the module/conda lines in each `slurm/job.
 
 ### Submitting PAT Distillation Jobs
 
-```bash
-cd PAT
+Run from the **repository root** (not from inside PAT):
 
+```bash
 # Submit all 15 distillation jobs
 bash slurm/submit_all.sh
 
