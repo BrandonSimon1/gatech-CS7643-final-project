@@ -165,7 +165,28 @@ The PAT submodule trains student models using knowledge distillation from pretra
 
 All PAT training commands must be run from inside the `PAT/` directory, since `train.py` and all config/data paths are relative to it.
 
-**Single run:**
+**Single run by name** (recommended — run from the repo root):
+
+```bash
+# List all 15 available jobs
+bash run_one.sh --list
+
+# Run a specific job
+bash run_one.sh pat_swin-resnet18
+```
+
+Job names follow the pattern `<distiller>_<teacher>-<student>`. The script looks up the correct config, teacher checkpoint, and flags automatically, then `cd`s into `PAT/` to run training. Example output from `--list`:
+
+```
+NAME                         METHOD   STUDENT                        TEACHER
+ofa_swin-resnet18            ofa      resnet18                       swin_tiny_patch4_window7_224
+fitnet_swin-resnet18         fitnet   resnet18                       swin_tiny_patch4_window7_224
+pat_swin-resnet18            pat      resnet18                       swin_tiny_patch4_window7_224
+pat_vit-resnet18             pat      resnet18                       vit_small_patch16_224
+...
+```
+
+**Single run manually** (if you need to customize arguments):
 
 ```bash
 cd PAT
@@ -206,7 +227,21 @@ The `standalone_training/` directory trains each student model on CIFAR-100 with
 
 #### Running locally (bash)
 
-**Single model:**
+**Single model by name** (recommended):
+
+```bash
+cd standalone_training
+
+# List available models
+bash run_one.sh --list
+
+# Train a specific model
+bash run_one.sh resnet18
+```
+
+The script validates the model name, sets up the correct data/output paths, and runs `train_student.py` with AMP enabled.
+
+**Single model manually** (if you need to customize arguments):
 
 ```bash
 cd standalone_training
