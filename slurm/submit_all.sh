@@ -22,6 +22,8 @@ ACCT="${SLURM_ACCOUNT:-}"
 PART="${SLURM_PARTITION:-}"
 FILTER="${1:-all}"
 
+mkdir -p slurm_outs
+
 TEACHERS_DIR="./pretrained/cifar_teachers"
 
 submit() {

@@ -121,23 +121,51 @@ This creates the symlink `PAT/pretrained -> ../pretrained`. The script is idempo
 
 ## Training
 
-There are two training pipelines: **PAT distillation** (teacher-student knowledge distillation from the paper) and **standalone training** (students trained by themselves as baselines).
+There are two training pipelines:
+
+1. **PAT distillation** — teacher-student knowledge distillation from the paper (OFA, FitNet, and PAT methods)
+2. **Standalone training** — students trained by themselves on CIFAR-100 as baselines (no teacher, no distillation)
+
+Comparing the two measures how much each distillation method improves each student architecture.
+
+### Student Models
+
+Both pipelines train the same five student architectures. Each uses one of two hyperparameter presets that match the PAT paper's configs:
+
+| Category | Model | Config | Optimizer | LR | Epochs |
+|----------|-------|--------|-----------|------|--------|
+| CNN | `resnet18` | `cnn.yaml` | SGD | 0.05 | 300 |
+| CNN | `mobilenetv2_100` | `cnn.yaml` | SGD | 0.05 | 300 |
+| ViT | `deit_tiny_patch16_224` | `vit_mlp.yaml` | AdamW | 5e-4 | 300 |
+| ViT | `swin_pico_patch4_window7_224` | `vit_mlp.yaml` | AdamW | 5e-4 | 300 |
+| MLP | `resmlp_12_224` | `vit_mlp.yaml` | AdamW | 5e-4 | 300 |
+
+The CNN preset uses minimal augmentation (horizontal flip, random crop). The ViT/MLP preset adds mixup, cutmix, autoaugment, random erasing, color jitter, and gradient clipping. Both use cosine LR scheduling with warmup, label smoothing (0.1), AMP, and model EMA.
+
+### Teacher Models (PAT Distillation Only)
+
+The distillation runs pair students with the following pretrained teachers:
+
+| Teacher | Pretrained Checkpoint |
+|---------|-----------------------|
+| `swin_tiny_patch4_window7_224` | `pretrained/cifar_teachers/swin_tiny_patch4_window7_224_cifar100.pth` |
+| `vit_small_patch16_224` | `pretrained/cifar_teachers/vit_small_patch16_224_cifar100.pth` |
+| `mixer_b16_224` | `pretrained/cifar_teachers/mixer_b16_224_cifar100.pth` |
+| `convnext_tiny` | `pretrained/cifar_teachers/convnext_tiny_cifar100.pth` |
+
+These checkpoints are stored in Git LFS. Make sure you have run `git lfs pull` and `./scripts/setup-pretrained-symlink.sh` before training (see [Pretrained Weights Symlink](#pretrained-weights-symlink)).
+
+---
 
 ### PAT Distillation Training
 
-The PAT submodule trains student models using knowledge distillation from pretrained teachers. The 15 training configurations cover three distillation methods (OFA, FitNet, PAT) across five student architectures and multiple teachers.
+The PAT submodule trains student models using knowledge distillation from pretrained teachers. The full set of experiments is 15 training runs covering three distillation methods across various teacher-student pairs. The reference for all 15 commands is `PAT/command_cifar.sh`.
 
-**Student models:**
+#### Running locally (bash)
 
-| Category | Model | Config |
-|----------|-------|--------|
-| CNN | `resnet18` | `configs/cifar/cnn.yaml` |
-| CNN | `mobilenetv2_100` | `configs/cifar/cnn.yaml` |
-| ViT | `deit_tiny_patch16_224` | `configs/cifar/vit_mlp.yaml` |
-| ViT | `swin_pico_patch4_window7_224` | `configs/cifar/vit_mlp.yaml` |
-| MLP | `resmlp_12_224` | `configs/cifar/vit_mlp.yaml` |
+All PAT training commands must be run from inside the `PAT/` directory, since `train.py` and all config/data paths are relative to it.
 
-**Run a single training locally:**
+**Single run:**
 
 ```bash
 cd PAT
@@ -146,82 +174,158 @@ python -m torch.distributed.launch --nproc_per_node=1 --master_port=29600 \
     --config configs/cifar/cnn.yaml --model resnet18 \
     --teacher swin_tiny_patch4_window7_224 \
     --teacher-pretrained ./pretrained/cifar_teachers/swin_tiny_patch4_window7_224_cifar100.pth \
-    --amp --model-ema --output ./output/cifar \
+    --amp --model-ema --pin-mem --output ./output/cifar \
     --distiller pat
 ```
 
+Key arguments:
+- `--config` — hyperparameter preset (`configs/cifar/cnn.yaml` or `configs/cifar/vit_mlp.yaml`)
+- `--model` — student architecture
+- `--teacher` / `--teacher-pretrained` — teacher architecture and its checkpoint path
+- `--distiller` — distillation method (`pat`, `ofa`, or `fitnet`)
+- `--amp` — mixed-precision training
+- `--model-ema` — exponential moving average of model weights
+- `--pin-mem` — pin dataloader memory (used with the PAT distiller)
+
+**Run all 15 commands sequentially** (not recommended — takes days on a single GPU):
+
+```bash
+cd PAT
+bash command_cifar.sh
+```
+
+To swap the teacher or distiller, change the `--teacher`, `--teacher-pretrained`, and `--distiller` arguments. See `PAT/command_cifar.sh` for the full list of all 15 combinations.
+
+Output (checkpoints, TensorBoard logs) is written to `PAT/output/cifar/`.
+
+---
+
 ### Standalone Student Training (Baselines)
 
-The `standalone_training/` directory contains code to train each student model on CIFAR-100 with only cross-entropy loss — no teacher, no distillation. This provides the baseline for measuring how much PAT improves each student.
+The `standalone_training/` directory trains each student model on CIFAR-100 with only cross-entropy loss — no teacher, no distillation. Hyperparameters are identical to the PAT configs so the only variable between the two pipelines is the presence or absence of distillation.
 
-Hyperparameters match the PAT configs exactly (same optimizer, LR schedule, augmentation, epochs) so the only variable is the presence or absence of distillation.
+#### Running locally (bash)
 
-**Run a single student locally:**
+**Single model:**
 
 ```bash
 cd standalone_training
 python train_student.py --model resnet18 --data-dir ../PAT/data --output-dir ./output --amp
 ```
 
-**Run all 5 students locally:**
+Key arguments:
+- `--model` — one of: `resnet18`, `mobilenetv2_100`, `deit_tiny_patch16_224`, `swin_pico_patch4_window7_224`, `resmlp_12_224`
+- `--data-dir` — path to the CIFAR-100 data root (will auto-download if missing)
+- `--output-dir` — where to save checkpoints and logs
+- `--amp` — mixed-precision training (enabled by default; disable with `--no-amp`)
+- `--epochs`, `--batch-size`, `--lr` — optional overrides for the preset values
+- `--resume <path>` — resume from a checkpoint
+
+**All 5 students sequentially:**
 
 ```bash
 cd standalone_training
 bash run_all.sh
 ```
 
-Available models: `resnet18`, `mobilenetv2_100`, `deit_tiny_patch16_224`, `swin_pico_patch4_window7_224`, `resmlp_12_224`.
+**Specific students only:**
 
-**Tests:**
+```bash
+cd standalone_training
+bash run_all.sh resnet18 mobilenetv2_100
+```
+
+`run_all.sh` respects the `DATA_DIR` and `OUTPUT_DIR` environment variables:
+
+```bash
+DATA_DIR=/scratch/data OUTPUT_DIR=/scratch/output bash run_all.sh
+```
+
+#### Output
+
+Each model writes to `output/<model>_standalone/`:
+- `config.json` — full training configuration for reproducibility
+- `log.txt` — per-epoch metrics (lr, train loss, val loss, val acc@1, val acc@5, EMA acc@1, best acc)
+- `last.pth` — checkpoint from the most recent epoch
+- `best.pth` — checkpoint with the highest validation accuracy (max of model and EMA)
+
+#### Tests
 
 ```bash
 cd standalone_training
 python -m pytest test_train_student.py -v
 ```
 
+The 33 unit tests verify model creation, config presets, transforms, optimizer/scheduler construction, accuracy computation, and smoke-test the training and evaluation loops on CPU with synthetic data. No GPU or CIFAR download needed.
+
+---
+
 ## Running on PACE (SLURM)
 
-Both training pipelines include SLURM scripts for the Georgia Tech PACE cluster. Each training run is submitted as a separate job (one model per job) to avoid losing progress if a single run fails.
+Both training pipelines include SLURM scripts for the Georgia Tech PACE cluster. Each training run is submitted as a **separate SLURM job** (one model/configuration per job) rather than running all training sequentially in a single job. This means:
+- Jobs run in parallel across the cluster if resources are available
+- A failure in one run does not block the others
+- Each job gets its own log file for easy debugging
 
-The PAT SLURM scripts live at the **repo root** (in `slurm/`) — not inside the PAT submodule — so changes to them stay in our own repo rather than dirtying the submodule. The scripts `cd` into `PAT/` before launching training.
+### Directory Structure
 
-### SLURM Configuration
+```
+slurm/                         # PAT distillation SLURM scripts
+  job.sh                       # batch script for one distillation run
+  submit_all.sh                # submits all 15 distillation jobs
 
-Both `slurm/job.sh` (PAT) and `standalone_training/slurm/job.sh` request the following resources per job:
+standalone_training/slurm/     # standalone baseline SLURM scripts
+  job.sh                       # batch script for one student run
+  submit_all.sh                # submits all 5 baseline jobs
+```
 
-| Resource | Value |
-|----------|-------|
-| Nodes | 1 |
-| CPUs | 8 |
-| GPU | 1x V100 |
-| Memory | 32 GB |
-| Walltime | 8 hours |
+The PAT SLURM scripts live at the **repo root** (in `slurm/`), not inside the PAT submodule, so changes stay in our repo and can be pulled by teammates. The scripts `cd` into `PAT/` at runtime before launching training.
+
+### SLURM Resource Configuration
+
+Both `slurm/job.sh` and `standalone_training/slurm/job.sh` request the same resources per job:
+
+| Resource | Value | Notes |
+|----------|-------|-------|
+| Nodes | 1 | Single-node training |
+| CPUs | 8 | Enough for dataloader workers |
+| GPU | 1x V100 | Adjust type if your partition uses different GPUs |
+| Memory | 32 GB | System RAM (not VRAM) |
+| Walltime | 8 hours | 300 epochs on CIFAR-100; adjust if needed |
+
+To change resource requests, edit the `#SBATCH` directives at the top of each `job.sh`.
 
 ### PACE Environment Setup
 
-Before submitting, uncomment and edit the module/conda lines in each `slurm/job.sh` to match your PACE environment:
+Before submitting jobs, uncomment and edit the module/conda lines in **both** `slurm/job.sh` and `standalone_training/slurm/job.sh` to match your PACE environment. For example:
 
 ```bash
-# module load anaconda3
-# module load cuda/11.7
-# conda activate <your_env>
+module load anaconda3
+module load cuda/11.7
+conda activate myenv
 ```
+
+The exact module names depend on what is available on your PACE cluster (Phoenix, Hive, etc.). Run `module avail` on a login node to see available modules.
 
 ### Submitting PAT Distillation Jobs
 
-Run from the **repository root** (not from inside PAT):
+Run all `slurm/` commands from the **repository root** (not from inside `PAT/`):
 
 ```bash
-# Submit all 15 distillation jobs
+# Submit all 15 distillation jobs (OFA + FitNet + PAT)
 bash slurm/submit_all.sh
 
-# Submit only jobs for a specific distiller
+# Submit only a specific distiller
 bash slurm/submit_all.sh pat       # 12 PAT distiller jobs
-bash slurm/submit_all.sh ofa       # 2 OFA jobs
-bash slurm/submit_all.sh fitnet    # 1 FitNet job
+bash slurm/submit_all.sh ofa       # 2 OFA distiller jobs
+bash slurm/submit_all.sh fitnet    # 1 FitNet distiller job
 ```
 
+Each job is named descriptively (e.g., `pat_swin-resnet18`, `ofa_swin-resmlp12`) so you can identify them in the queue. SLURM log files are written to `slurm_outs/<jobname>_<jobid>.out` at the repo root.
+
 ### Submitting Standalone Baseline Jobs
+
+Run from inside `standalone_training/`:
 
 ```bash
 cd standalone_training
@@ -229,26 +333,33 @@ cd standalone_training
 # Submit all 5 student baseline jobs
 bash slurm/submit_all.sh
 
-# Submit a single student
+# Submit specific students
 bash slurm/submit_all.sh resnet18
+bash slurm/submit_all.sh resnet18 deit_tiny_patch16_224
 ```
+
+Jobs are named `standalone_<model>`. SLURM logs go to `standalone_training/slurm_outs/`.
 
 ### Optional SLURM Overrides
 
-If your PACE setup requires an account or partition, set them before submitting:
+If your PACE setup requires a charge account or specific partition, set them as environment variables before submitting. These are **optional** — if unset, the flags are omitted from the `sbatch` call entirely:
 
 ```bash
+# Set for both PAT and standalone submissions
 export SLURM_ACCOUNT="gts-<PI_username>"
 export SLURM_PARTITION="gpu"
+
+# Then submit as usual
 bash slurm/submit_all.sh
+cd standalone_training && bash slurm/submit_all.sh
 ```
 
-These are only included in the `sbatch` call if set.
-
-### Monitoring Jobs
+### Monitoring and Managing Jobs
 
 ```bash
-squeue -u $USER                    # list your queued/running jobs
-scancel <job_id>                   # cancel a specific job
-tail -f slurm_outs/<jobname>_<id>.out  # follow live output
+squeue -u $USER                              # list your queued/running jobs
+squeue -u $USER --format="%.10i %.30j %.8T"  # show job ID, name, and state
+scancel <job_id>                             # cancel a specific job
+scancel -u $USER                             # cancel all your jobs
+tail -f slurm_outs/<jobname>_<jobid>.out     # follow live output from a job
 ```

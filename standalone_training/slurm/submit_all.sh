@@ -16,6 +16,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ACCT="${SLURM_ACCOUNT:-}"
 PART="${SLURM_PARTITION:-}"
 
+mkdir -p slurm_outs
+
 ALL_STUDENTS=(
     resnet18
     mobilenetv2_100
