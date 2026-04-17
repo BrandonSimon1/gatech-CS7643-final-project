@@ -305,6 +305,7 @@ Both training pipelines include SLURM scripts for the Georgia Tech PACE cluster.
 ### Directory Structure
 
 ```
+setup_env.sh                   # shared PACE environment setup (modules + conda)
 slurm/                         # PAT distillation SLURM scripts
   job.sh                       # batch script for one distillation run
   submit_all.sh                # submits all 15 distillation jobs
@@ -332,15 +333,28 @@ To change resource requests, edit the `#SBATCH` directives at the top of each `j
 
 ### PACE Environment Setup
 
-Before submitting jobs, uncomment and edit the module/conda lines in **both** `slurm/job.sh` and `standalone_training/slurm/job.sh` to match your PACE environment. For example:
+All PACE environment configuration (module loads, conda activation) is centralized in `setup_env.sh` at the repo root. Both SLURM job scripts source this file automatically, so you only need to edit it in one place.
+
+The current defaults are:
 
 ```bash
 module load anaconda3
-module load cuda/11.7
-conda activate myenv
+module load cuda/11.6
+conda activate <repo_root>/venv2
 ```
 
-The exact module names depend on what is available on your PACE cluster (Phoenix, Hive, etc.). Run `module avail` on a login node to see available modules.
+Edit `setup_env.sh` if your PACE setup uses different module versions or a different environment path. The exact module names depend on what is available on your PACE cluster (Phoenix, Hive, etc.). Run `module avail` on a login node to see available modules.
+
+You can also source the script manually for interactive work on a PACE compute node:
+
+```bash
+# After ssh-ing into a compute node or starting an interactive session
+source setup_env.sh
+
+# Now you can run training directly
+bash run_one.sh pat_swin-resnet18
+cd standalone_training && bash run_one.sh resnet18
+```
 
 ### Submitting PAT Distillation Jobs
 

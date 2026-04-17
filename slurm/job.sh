@@ -30,10 +30,8 @@ for var in CONFIG MODEL TEACHER TEACHER_CKPT DISTILLER; do
     fi
 done
 
-# ── Environment setup (edit these for your PACE environment) ────────────
-module load anaconda3
-module load cuda/11.6
-conda activate ${SLURM_SUBMIT_DIR:-.}/venv2
+# ── Environment setup ───────────────────────────────────────────────────
+source "${SLURM_SUBMIT_DIR:-.}/setup_env.sh"
 
 # SLURM's -o path is relative to SLURM_SUBMIT_DIR (repo root); ensure it exists.
 mkdir -p "${SLURM_SUBMIT_DIR:-.}/slurm_outs"
