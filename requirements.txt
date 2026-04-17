@@ -6,7 +6,7 @@ grpcio==1.80.0
 idna==3.11
 Markdown==3.10.2
 MarkupSafe==3.0.3
-numpy==2.2.6
+numpy==1.26.4
 packaging==26.0
 pillow==12.2.0
 protobuf==7.34.1
