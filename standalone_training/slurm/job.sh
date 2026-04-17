@@ -20,10 +20,8 @@ if [ -z "${MODEL:-}" ]; then
     exit 1
 fi
 
-# ── Environment setup (edit these for your PACE environment) ────────────
-# module load anaconda3
-# module load cuda/11.7
-# conda activate <your_env>
+# ── Environment setup ───────────────────────────────────────────────────
+source "${SLURM_SUBMIT_DIR:-.}/../setup_env.sh"
 
 cd "${SLURM_SUBMIT_DIR:-.}"
 mkdir -p slurm_outs output
