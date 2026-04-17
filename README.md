@@ -217,7 +217,15 @@ bash command_cifar.sh
 
 To swap the teacher or distiller, change the `--teacher`, `--teacher-pretrained`, and `--distiller` arguments. See `PAT/command_cifar.sh` for the full list of all 15 combinations.
 
-Output (checkpoints, TensorBoard logs) is written to `PAT/output/cifar/`.
+#### Output
+
+Each run writes to `PAT/output/cifar/<experiment>/`:
+- `args.yaml` — full training arguments for reproducibility
+- `train.log` — training log
+- `summary.csv` — per-epoch results summary
+- `checkpoint/` — model checkpoints (including `model_best.pth.tar`)
+- `ema<decay>_checkpoint/` — EMA model checkpoints
+- `train_events/` — TensorBoard event files (view with `tensorboard --logdir PAT/output/cifar`)
 
 ---
 
