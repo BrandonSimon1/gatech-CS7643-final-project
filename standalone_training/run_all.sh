@@ -45,7 +45,7 @@ train_model() {
         --model "$model" \
         --data-dir "$DATA_DIR" \
         --output-dir "$OUTPUT_DIR" \
-        --amp
+        --no-amp
 
     echo ""
     echo " Finished: ${model} at $(date)"

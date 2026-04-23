@@ -40,7 +40,7 @@ python train_student.py \
     --model "${MODEL}" \
     --data-dir "${DATA_DIR}" \
     --output-dir ./output \
-    --amp
+    --no-amp
 
 echo ""
 echo "Finished: $(date)"
