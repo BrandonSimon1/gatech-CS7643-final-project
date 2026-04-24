@@ -66,7 +66,8 @@ echo "============================================================"
 python "$SCRIPT_DIR/train_student.py" \
     --model "$MODEL" \
     --data-dir "$DATA_DIR" \
-    --output-dir "$OUTPUT_DIR"
+    --output-dir "$OUTPUT_DIR" \
+    --no-amp
 
 echo ""
 echo "Finished: ${MODEL} at $(date)"

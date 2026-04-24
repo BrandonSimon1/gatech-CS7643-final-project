@@ -39,7 +39,8 @@ DATA_DIR="${DATA_DIR:-../PAT/data}"
 python train_student.py \
     --model "${MODEL}" \
     --data-dir "${DATA_DIR}" \
-    --output-dir ./output
+    --output-dir ./output \
+    --no-amp
 
 echo ""
 echo "Finished: $(date)"
