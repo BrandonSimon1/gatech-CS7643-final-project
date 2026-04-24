@@ -26,6 +26,7 @@ import torchvision
 import torchvision.transforms as transforms
 from timm.data.mixup import Mixup
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
+from timm.data.auto_augment import rand_augment_transform
 from timm.models.registry import register_model
 from timm.models.swin_transformer import _create_swin_transformer
 from timm.scheduler.cosine_lr import CosineLRScheduler
@@ -60,7 +61,7 @@ CNN_DEFAULTS = dict(
     weight_decay=2e-3,
     sched="cosine",
     warmup_epochs=3,
-    warmup_lr=1e-6,
+    warmup_lr=1e-4,
     color_jitter=0.0,
     smoothing=0.1,
     reprob=0.0,
@@ -154,7 +155,7 @@ def build_transforms(args, cfg, is_train):
                 )
             )
         if cfg["aa"]:
-            t.append(transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.CIFAR10))
+            t.append(rand_augment_transform(cfg["aa"], {}))
         t.append(transforms.ToTensor())
         t.append(transforms.Normalize(CIFAR100_MEAN, CIFAR100_STD))
         if cfg["reprob"] > 0:
@@ -267,7 +268,8 @@ def accuracy(output, target, topk=(1,)):
 
 
 def train_one_epoch(
-    model, loader, criterion, optimizer, scheduler, scaler, mixup_fn, cfg, epoch, device
+    model, loader, criterion, optimizer, scheduler, scaler, mixup_fn, cfg, epoch, device,
+    model_ema=None,
 ):
     model.train()
     loss_meter = AverageMeter()
@@ -299,6 +301,9 @@ def train_one_epoch(
             if cfg["clip_grad"] > 0:
                 nn.utils.clip_grad_norm_(model.parameters(), cfg["clip_grad"])
             optimizer.step()
+
+        if model_ema is not None:
+            model_ema.update(model)
 
         global_step = epoch * num_steps + step
         scheduler.step_update(global_step)
@@ -439,7 +444,8 @@ def main():
 
     for epoch in range(start_epoch, cfg["epochs"]):
         train_loss, train_acc1, elapsed = train_one_epoch(
-            model, train_loader, criterion, optimizer, scheduler, scaler, mixup_fn, cfg, epoch, device
+            model, train_loader, criterion, optimizer, scheduler, scaler, mixup_fn, cfg, epoch, device,
+            model_ema=model_ema,
         )
         scheduler.step(epoch + 1)
 

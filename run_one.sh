@@ -136,7 +136,7 @@ cd PAT
 
 python -m torch.distributed.launch \
     --nproc_per_node=1 \
-    --master_port=$((29500 + RANDOM % 100)) \
+    --master_port=$((29500 + RANDOM % 1000)) \
     train.py ./data \
     --dataset cifar100 \
     --num-classes 100 \
