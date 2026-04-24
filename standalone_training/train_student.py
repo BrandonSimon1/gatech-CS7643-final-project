@@ -132,7 +132,7 @@ def get_args():
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num-workers", type=int, default=4)
-    parser.add_argument("--amp", action="store_true", default=True, help="Use AMP")
+    parser.add_argument("--amp", action="store_true", default=False, help="Use AMP")
     parser.add_argument("--no-amp", action="store_true", help="Disable AMP")
     parser.add_argument("--ema", action="store_true", default=True, help="Model EMA")
     parser.add_argument("--ema-decay", type=float, default=0.99996)

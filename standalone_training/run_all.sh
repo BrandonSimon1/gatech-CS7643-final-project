@@ -44,8 +44,7 @@ train_model() {
     python "$SCRIPT_DIR/train_student.py" \
         --model "$model" \
         --data-dir "$DATA_DIR" \
-        --output-dir "$OUTPUT_DIR" \
-        --amp
+        --output-dir "$OUTPUT_DIR"
 
     echo ""
     echo " Finished: ${model} at $(date)"
