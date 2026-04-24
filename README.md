@@ -37,6 +37,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+On PACE, the environment is different — `setup_env.sh` loads cluster modules and activates a conda environment (`venv2`). See [Running on PACE](#running-on-pace-slurm).
+
 ### Pretrained Weights
 
 The PAT submodule expects weights at `PAT/pretrained/`. Run the setup script to create a symlink from the root `pretrained/` directory:
@@ -126,7 +128,7 @@ Supports `--epochs`, `--batch-size`, `--lr` overrides and `--resume <path>`. `ru
 **Tests:**
 
 ```bash
-python -m pytest test_train_student.py -v   # 33 tests, CPU only, no data download
+python -m pytest test_train_student.py -v   # CPU only, no data download needed
 ```
 
 ## Running on PACE (SLURM)

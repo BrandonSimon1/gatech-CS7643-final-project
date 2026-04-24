@@ -20,6 +20,7 @@ import train_student as ts
 def dummy_args():
     """Minimal args namespace used by helpers that take `args`."""
     return argparse.Namespace(
+        model="resnet18",
         img_size=224,
         amp=False,
         no_amp=False,

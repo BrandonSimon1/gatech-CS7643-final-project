@@ -36,4 +36,4 @@ conda activate "${_REPO_ROOT}/venv2"
 
 unset _REPO_ROOT
 
-echo "Environment ready: $(python --version), CUDA $(nvcc --version 2>/dev/null | grep -oP 'release \K[\d.]+' || echo 'N/A')"
+echo "Environment ready: $(python --version), CUDA $(nvcc --version 2>/dev/null | sed -n 's/.*release \([0-9.]*\).*/\1/p' || echo 'N/A')"
