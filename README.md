@@ -1,50 +1,44 @@
 # CS 7643 Final Project
 
-Reproducing "Perspective-Aware Teaching: Adapting Knowledge for Heterogeneous Distillation" (`original-paper.pdf`). The paper's code is the `PAT` submodule. We add standalone baseline training and SLURM automation for the Georgia Tech PACE cluster.
+Reproducing "Perspective-Aware Teaching: Adapting Knowledge for Heterogeneous Distillation" (`original-paper.pdf`). The paper's code is the `PAT` submodule. We add standalone baseline training and run scripts for cloud GPU nodes (with SLURM scripts for PACE kept as a legacy option).
 
 ## Setup
 
-### Clone
+### Quick start (cloud GPU node)
+
+For a fresh Ubuntu/Debian-style cloud node with an NVIDIA GPU and Python 3.10 already available:
 
 ```bash
-git clone --recursive <repo-url>   # pulls PAT submodule
+git clone --recursive <repo-url>
+cd final-project
+bash scripts/setup_cloud_env.sh    # one-time: submodule, LFS, .venv, deps, symlinks
+source scripts/activate.sh         # activate the venv in any shell
 ```
 
-If you already cloned without `--recursive`:
+`setup_cloud_env.sh` is idempotent — re-run it any time. It runs a CUDA sanity check at the end so you'll know immediately if the GPU is wired up.
+
+### Manual setup
+
+If you'd rather do each step yourself:
 
 ```bash
-git submodule update --init --recursive
-```
+# Clone with submodule
+git clone --recursive <repo-url>
+# (or: git submodule update --init --recursive)
 
-### Git LFS
+# Git LFS for pretrained teacher weights
+sudo apt-get install git-lfs   # or: brew install git-lfs
+git lfs install
+git lfs pull
 
-Pretrained teacher weights are stored with [Git LFS](https://git-lfs.com/):
-
-```bash
-brew install git-lfs   # or: sudo apt-get install git-lfs
-git lfs install        # once per machine
-git lfs pull           # if you cloned before installing LFS
-```
-
-### Python Environment
-
-Requires Python 3.10.15. We recommend [pyenv](https://github.com/pyenv/pyenv):
-
-```bash
-pyenv install 3.10.15        # .python-version pins this automatically
+# Python 3.10.15 (use pyenv if not on system Python)
+pyenv install 3.10.15          # .python-version pins this
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-On PACE, the environment is different — `setup_env.sh` loads cluster modules and activates a conda environment (`venv2`). See [Running on PACE](#running-on-pace-slurm).
-
-### Pretrained Weights
-
-The PAT submodule expects weights at `PAT/pretrained/`. Run the setup script to create a symlink from the root `pretrained/` directory:
-
-```bash
-./scripts/setup-pretrained-symlink.sh
+# Symlink PAT/pretrained -> ../pretrained (for teacher checkpoints)
+bash scripts/setup-pretrained-symlink.sh
 ```
 
 ## Training
@@ -66,23 +60,27 @@ Comparing the two isolates the effect of distillation.
 | ViT | `swin_pico_patch4_window7_224` | `vit_mlp.yaml` | AdamW | 5e-4 | 300 |
 | MLP | `resmlp_12_224` | `vit_mlp.yaml` | AdamW | 5e-4 | 300 |
 
-CNN preset: minimal augmentation. ViT/MLP preset: mixup, cutmix, autoaugment, random erasing, gradient clipping. Both use cosine LR with warmup, label smoothing (0.1), AMP, and model EMA.
+CNN preset: minimal augmentation. ViT/MLP preset: mixup, cutmix, RandAugment, random erasing, gradient clipping. Both use cosine LR with warmup, label smoothing (0.1), and model EMA. AMP is on by default for PAT distillation but disabled for standalone training (see [AMP note](#a-note-on-amp) below).
 
 Teachers (distillation only): `swin_tiny_patch4_window7_224`, `vit_small_patch16_224`, `mixer_b16_224`, `convnext_tiny`. Checkpoints are in `pretrained/cifar_teachers/`.
 
 ### PAT Distillation (15 runs)
 
-```bash
-# List all jobs
-bash run_one.sh --list
+From the repo root:
 
-# Run one (from repo root)
-bash run_one.sh pat_swin-resnet18
+```bash
+bash run_one.sh --list             # list all 15 jobs
+bash run_one.sh pat_swin-resnet18  # run one
+bash run_all.sh                    # run all 15 sequentially
+bash run_all.sh pat                # only PAT jobs (12)
+bash run_all.sh ofa                # only OFA jobs (2)
+bash run_all.sh fitnet             # only FitNet jobs (1)
+bash run_all.sh pat_swin-resnet18 pat_vit-resnet18   # specific subset
 ```
 
-Job names follow `<distiller>_<teacher>-<student>`. The script looks up the config, teacher checkpoint, and flags, then `cd`s into `PAT/` to run training.
+Job names follow `<distiller>_<teacher>-<student>`. By default `run_all.sh` continues through failures and reports them at the end. Set `STOP_ON_ERROR=1` to abort on first failure.
 
-For custom arguments, run PAT's `train.py` directly:
+For custom arguments, invoke PAT's `train.py` directly:
 
 ```bash
 cd PAT
@@ -101,24 +99,16 @@ python -m torch.distributed.launch --nproc_per_node=1 --master_port=29600 \
 
 ```bash
 cd standalone_training
-
-# List available models
-bash run_one.sh --list
-
-# Run one
-bash run_one.sh resnet18
-
-# Run all sequentially
-bash run_all.sh
-
-# Run specific subset
-bash run_all.sh resnet18 mobilenetv2_100
+bash run_one.sh --list             # list models
+bash run_one.sh resnet18           # run one
+bash run_all.sh                    # all 5 sequentially
+bash run_all.sh resnet18 mobilenetv2_100   # specific subset
 ```
 
 For custom arguments:
 
 ```bash
-python train_student.py --model resnet18 --data-dir ../PAT/data --output-dir ./output --amp
+python train_student.py --model resnet18 --data-dir ../PAT/data --output-dir ./output
 ```
 
 Supports `--epochs`, `--batch-size`, `--lr` overrides and `--resume <path>`. `run_all.sh` respects `DATA_DIR` and `OUTPUT_DIR` environment variables.
@@ -131,22 +121,30 @@ Supports `--epochs`, `--batch-size`, `--lr` overrides and `--resume <path>`. `ru
 python -m pytest test_train_student.py -v   # CPU only, no data download needed
 ```
 
-## Running on PACE (SLURM)
+### A note on AMP
 
-Each training run is submitted as a separate SLURM job — they run in parallel and failures are isolated.
+Standalone training defaults to `--no-amp` (FP32). cuBLAS FP16 tensor ops require matrix dimensions to be multiples of 8, and CIFAR-100's 100 classes violates that constraint, causing `CUBLAS_STATUS_INVALID_VALUE` on V100s. The performance hit on these small models is negligible. Pass `--amp` if you're on Ampere+ (A100, etc.) where this isn't enforced.
 
-### Project Structure
+## Running on PACE (SLURM) — legacy
+
+We originally targeted Georgia Tech's PACE cluster, but queue wait times pushed us to cloud GPUs. The SLURM scripts still work and are useful when PACE is available.
+
+### Project layout
 
 ```
-setup_env.sh                   # shared PACE environment (modules + conda)
-run_one.sh                     # run one PAT distillation job locally
+run_one.sh, run_all.sh         # cloud-node PAT distillation
+setup_env.sh                   # PACE environment (modules + conda)
+scripts/
+  setup_cloud_env.sh           # one-time cloud setup
+  activate.sh                  # source to activate venv
+  setup-pretrained-symlink.sh
 slurm/
   job.sh                       # SLURM batch script for PAT distillation
   submit_all.sh                # submits all 15 PAT jobs
+  smoke_test.sh                # 10-min env / cuBLAS sanity check
 standalone_training/
   train_student.py             # standalone training code
-  run_one.sh                   # run one standalone job locally
-  run_all.sh                   # run all 5 standalone jobs locally
+  run_one.sh, run_all.sh       # cloud-node standalone runs
   test_train_student.py        # unit tests
   slurm/
     job.sh                     # SLURM batch script for standalone
@@ -155,39 +153,42 @@ standalone_training/
 
 PAT SLURM scripts live at the repo root (not inside the submodule) so teammates can pull them.
 
-### Environment Setup
+### Environment setup
 
-All PACE configuration is in `setup_env.sh` (modules, conda). Both SLURM job scripts source it automatically. Edit this file to change module versions or the environment path.
+`setup_env.sh` loads modules and activates the conda env. The SLURM job scripts source it automatically.
 
 ```bash
-# Current defaults:
+# Defaults:
 module load anaconda3
 module load cuda/11.6
 conda activate <repo_root>/venv2
 ```
 
-For interactive work on a compute node:
+For interactive work on a PACE compute node:
 
 ```bash
 source setup_env.sh
 bash run_one.sh pat_swin-resnet18
 ```
 
-### Resources Per Job
+### Resources per job
 
 | Resource | Value |
 |----------|-------|
 | Nodes | 1 |
 | CPUs | 8 |
-| GPU | 1x V100 |
+| GPU | 1× V100 |
 | Memory | 32 GB |
 | Walltime | 8 hours |
 
 Edit `#SBATCH` directives in the `job.sh` files to change these.
 
-### Submitting Jobs
+### Submitting jobs
 
 ```bash
+# Smoke test first (recommended) — 10 min, prints driver/CUDA/PyTorch versions and runs GEMM checks
+sbatch slurm/smoke_test.sh
+
 # PAT distillation (from repo root)
 bash slurm/submit_all.sh            # all 15 jobs
 bash slurm/submit_all.sh pat        # 12 PAT jobs only
@@ -207,7 +208,7 @@ export SLURM_ACCOUNT="gts-<PI_username>"
 export SLURM_PARTITION="gpu"
 ```
 
-### Monitoring Jobs
+### Monitoring jobs
 
 ```bash
 squeue -u $USER                              # list jobs
