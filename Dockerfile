@@ -4,17 +4,20 @@
 # Requires NVIDIA driver >= 510.47 on the host and the NVIDIA Container Toolkit
 # (run with `--gpus all`).
 #
-# Build:
-#   git submodule update --init --recursive   # PAT submodule must be checked out
+# Build (locally; CI handles this automatically — see
+# .github/workflows/docker-build-push.yml):
+#   git submodule update --init --recursive   # PAT submodule
+#   git lfs pull                              # teacher weights
 #   docker build -t pat-distill .
 #
-# Run (mount data and outputs so they persist):
-#   docker run --gpus all --rm -it \
-#     -v "$PWD/PAT/data:/workspace/PAT/data" \
-#     -v "$PWD/pretrained:/workspace/pretrained" \
-#     -v "$PWD/PAT/output:/workspace/PAT/output" \
-#     -v "$PWD/standalone_training/output:/workspace/standalone_training/output" \
-#     pat-distill bash run_one.sh pat_swin-resnet18
+# Run — image is self-contained, no volume mounts required. Outputs land
+# inside the container; pass -v on the output dirs only if you want to
+# persist them between runs:
+#   docker run --gpus all --rm -it pat-distill bash run_one.sh pat_swin-resnet18
+#
+# Or pull from ghcr:
+#   docker run --gpus all --rm -it ghcr.io/brandonsimon1/gatech-cs7643-final-project:latest \
+#       bash run_one.sh pat_swin-resnet18
 
 FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
