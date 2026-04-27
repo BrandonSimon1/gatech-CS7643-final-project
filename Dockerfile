@@ -2,10 +2,11 @@
 #
 # Self-contained training image for cloud GPU nodes.
 #
-# Base: pytorch/pytorch:1.13.0-cuda11.6-cudnn8-devel — already has Python +
-# PyTorch 1.13 (cu116 build) + cuDNN 8 + CUDA 11.6 toolkit, so we just layer
-# our extras on top. Requires NVIDIA driver >= 510.47 on the host and the
-# NVIDIA Container Toolkit (run with `--gpus all`).
+# Base: nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04 — needed because PyTorch
+# 1.13's cu116 wheels are built against CUDA 11.6 specifically. Python 3.10
+# is installed via uv (Astral's package manager — downloads a prebuilt
+# interpreter, no apt PPA gymnastics). Requires NVIDIA driver >= 510.47 on
+# the host and the NVIDIA Container Toolkit (run with `--gpus all`).
 #
 # Build (CI handles this; see .github/workflows/docker-build-push.yml):
 #   git submodule update --init --recursive
@@ -20,7 +21,7 @@
 #       ghcr.io/brandonsimon1/gatech-cs7643-final-project:latest \
 #       bash run_one.sh pat_swin-resnet18
 
-FROM pytorch/pytorch:1.13.0-cuda11.6-cudnn8-devel
+FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -28,7 +29,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# ── git, git-lfs, build tools ───────────────────────────────────────────
+# ── System deps (git, git-lfs, build tools, uv) ────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
@@ -39,16 +40,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && /tmp/git-lfs-3.4.1/install.sh \
     && rm -rf /tmp/git-lfs-* \
     && git lfs install --system \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+ENV PATH="/root/.local/bin:${PATH}"
+
+# ── Python 3.10.15 + venv at /opt/venv ─────────────────────────────────
+RUN uv python install 3.10.15 \
+    && uv venv --python 3.10.15 /opt/venv
+
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
 
 # ── Python deps ─────────────────────────────────────────────────────────
-# torch + torchvision are already pinned in the base image at the right
-# CUDA 11.6 build, so pip just resolves the rest.
+# Install PyTorch + torchvision against the cu116 index explicitly
+# (default PyPI wheels for torch==1.13 ship cu117).
 COPY requirements.txt ./
-RUN pip install --upgrade pip wheel \
-    && pip install -r requirements.txt
+RUN uv pip install --no-cache \
+        --extra-index-url https://download.pytorch.org/whl/cu116 \
+        torch==1.13.0+cu116 torchvision==0.14.0+cu116 \
+    && uv pip install --no-cache -r requirements.txt
+
+WORKDIR /workspace
 
 # ── Project code ────────────────────────────────────────────────────────
 COPY . .
