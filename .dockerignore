@@ -1,0 +1,37 @@
+# VCS
+.git/
+.gitignore
+
+# Python
+.venv/
+venv/
+venv2/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Training artifacts (mount these at runtime instead)
+output/
+slurm_outs/
+PAT/output/
+PAT/data/
+standalone_training/output/
+
+# LFS-tracked teacher weights (mount pretrained/ as a volume)
+pretrained/cifar_teachers/*.pth
+
+# Build artifacts
+build/
+dist/
+node_modules/
+
+# Docs / scratch
+*.log
