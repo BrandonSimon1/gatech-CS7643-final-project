@@ -19,21 +19,34 @@ source scripts/activate.sh         # activate the venv in any shell
 
 ### Docker
 
-A `Dockerfile` is provided with CUDA 11.6 + cuDNN 8 (matches the PyTorch 1.13 cu116 wheels). Requires NVIDIA driver ≥ 510.47 on the host and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+A `Dockerfile` is provided with CUDA 11.6 + cuDNN 8 (matches the PyTorch 1.13 cu116 wheels). The image is **self-contained** — code, PAT submodule, and LFS-tracked teacher weights are all baked in, so you don't need volume mounts to start training. Requires NVIDIA driver ≥ 510.47 on the host and the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+
+**Pull from GHCR** (built and pushed automatically by GitHub Actions on every push to `main`):
 
 ```bash
-git submodule update --init --recursive   # PAT submodule
-git lfs pull                              # teacher weights on host
+docker run --gpus all --rm -it \
+    ghcr.io/brandonsimon1/gatech-cs7643-final-project:latest \
+    bash run_one.sh pat_swin-resnet18
+```
 
-docker build -t pat-distill .
+Optional volume mounts to persist outputs / CIFAR-100 download between runs:
 
-# Mount data, weights, and outputs so they persist outside the container
+```bash
 docker run --gpus all --rm -it \
     -v "$PWD/PAT/data:/workspace/PAT/data" \
-    -v "$PWD/pretrained:/workspace/pretrained" \
     -v "$PWD/PAT/output:/workspace/PAT/output" \
     -v "$PWD/standalone_training/output:/workspace/standalone_training/output" \
-    pat-distill bash run_one.sh pat_swin-resnet18
+    ghcr.io/brandonsimon1/gatech-cs7643-final-project:latest \
+    bash run_all.sh
+```
+
+**Build locally** (rare — typically just pull the image):
+
+```bash
+git submodule update --init --recursive
+git lfs pull
+docker build -t pat-distill .
+docker run --gpus all --rm -it pat-distill bash
 ```
 
 ### Manual setup

@@ -18,15 +18,15 @@ __pycache__/
 .vscode/
 .DS_Store
 
-# Training artifacts (mount these at runtime instead)
+# Training artifacts — never want these in the image
 output/
 slurm_outs/
 PAT/output/
 PAT/data/
 standalone_training/output/
 
-# LFS-tracked teacher weights (mount pretrained/ as a volume)
-pretrained/cifar_teachers/*.pth
+# Teacher weights (pretrained/cifar_teachers/*.pth) ARE intentionally
+# included so the image is self-contained. The CI checkout pulls LFS.
 
 # Build artifacts
 build/
