@@ -28,13 +28,19 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 # ── System packages + Python 3.10 (deadsnakes PPA) + Git LFS ────────────
+# We install the deadsnakes PPA manually rather than via add-apt-repository
+# because the latter touches /etc/resolv.conf, which breaks under buildx.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        software-properties-common \
         ca-certificates \
         curl \
+        gnupg \
         git \
         build-essential \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+        | gpg --dearmor -o /etc/apt/keyrings/deadsnakes.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu focal main" \
+        > /etc/apt/sources.list.d/deadsnakes.list \
     && apt-get update && apt-get install -y --no-install-recommends \
         python3.10 \
         python3.10-venv \
@@ -48,8 +54,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3.10 /usr/local/bin/python \
     && ln -sf /usr/bin/python3.10 /usr/local/bin/python3 \
     && git lfs install --system \
-    && apt-get purge -y software-properties-common \
-    && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
