@@ -1,25 +1,26 @@
 # syntax=docker/dockerfile:1.6
 #
-# CUDA 11.6 + cuDNN 8 on Ubuntu 20.04 — matches PyTorch 1.13 cu116 wheels.
-# Requires NVIDIA driver >= 510.47 on the host and the NVIDIA Container Toolkit
-# (run with `--gpus all`).
+# Self-contained training image for cloud GPU nodes.
 #
-# Build (locally; CI handles this automatically — see
-# .github/workflows/docker-build-push.yml):
-#   git submodule update --init --recursive   # PAT submodule
-#   git lfs pull                              # teacher weights
+# Base: pytorch/pytorch:1.13.0-cuda11.6-cudnn8-devel — already has Python +
+# PyTorch 1.13 (cu116 build) + cuDNN 8 + CUDA 11.6 toolkit, so we just layer
+# our extras on top. Requires NVIDIA driver >= 510.47 on the host and the
+# NVIDIA Container Toolkit (run with `--gpus all`).
+#
+# Build (CI handles this; see .github/workflows/docker-build-push.yml):
+#   git submodule update --init --recursive
+#   git lfs pull
 #   docker build -t pat-distill .
 #
-# Run — image is self-contained, no volume mounts required. Outputs land
-# inside the container; pass -v on the output dirs only if you want to
-# persist them between runs:
+# Run — image is self-contained, no volume mounts required:
 #   docker run --gpus all --rm -it pat-distill bash run_one.sh pat_swin-resnet18
 #
 # Or pull from ghcr:
-#   docker run --gpus all --rm -it ghcr.io/brandonsimon1/gatech-cs7643-final-project:latest \
+#   docker run --gpus all --rm -it \
+#       ghcr.io/brandonsimon1/gatech-cs7643-final-project:latest \
 #       bash run_one.sh pat_swin-resnet18
 
-FROM nvidia/cuda:11.6.2-cudnn8-devel-ubuntu20.04
+FROM pytorch/pytorch:1.13.0-cuda11.6-cudnn8-devel
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -27,58 +28,35 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
-# ── System packages + Python 3.10 (deadsnakes PPA) + Git LFS ────────────
-# We install the deadsnakes PPA manually rather than via add-apt-repository
-# because the latter touches /etc/resolv.conf, which breaks under buildx.
+# ── git, git-lfs, build tools ───────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
-        gnupg \
         git \
         build-essential \
-    && install -d -m 0755 /etc/apt/keyrings \
-    && curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
-        | gpg --dearmor -o /etc/apt/keyrings/deadsnakes.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu focal main" \
-        > /etc/apt/sources.list.d/deadsnakes.list \
-    && apt-get update && apt-get install -y --no-install-recommends \
-        python3.10 \
-        python3.10-venv \
-        python3.10-dev \
-        python3.10-distutils \
     && curl -fsSL https://github.com/git-lfs/git-lfs/releases/download/v3.4.1/git-lfs-linux-amd64-v3.4.1.tar.gz \
         | tar -xz -C /tmp \
     && /tmp/git-lfs-3.4.1/install.sh \
     && rm -rf /tmp/git-lfs-* \
-    && curl -fsSL https://bootstrap.pypa.io/get-pip.py | python3.10 \
-    && ln -sf /usr/bin/python3.10 /usr/local/bin/python \
-    && ln -sf /usr/bin/python3.10 /usr/local/bin/python3 \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
 # ── Python deps ─────────────────────────────────────────────────────────
-# Install PyTorch + torchvision first against the cu116 index so we get
-# the CUDA 11.6 build (default PyPI wheels for torch==1.13 ship cu117).
-# The remaining requirements then resolve fine since torch is already pinned.
+# torch + torchvision are already pinned in the base image at the right
+# CUDA 11.6 build, so pip just resolves the rest.
 COPY requirements.txt ./
-RUN python -m pip install --upgrade pip wheel \
-    && python -m pip install \
-        --extra-index-url https://download.pytorch.org/whl/cu116 \
-        torch==1.13.0+cu116 torchvision==0.14.0+cu116 \
-    && python -m pip install -r requirements.txt
+RUN pip install --upgrade pip wheel \
+    && pip install -r requirements.txt
 
 # ── Project code ────────────────────────────────────────────────────────
 COPY . .
 
-# Symlink PAT/pretrained -> ../pretrained so the PAT submodule finds
-# teacher checkpoints (mount the host pretrained/ at /workspace/pretrained).
+# Symlink PAT/pretrained -> ../pretrained so PAT finds the teacher checkpoints.
 RUN bash scripts/setup-pretrained-symlink.sh || true
 
-# Sanity check: fail the build early if torch can't see CUDA at runtime.
-# (Skips the GPU check during build since the build host typically has none —
-# this just verifies the cu116 build is present.)
+# Sanity check — fail the build early if torch's CUDA build doesn't match.
 RUN python -c "import torch; assert torch.version.cuda == '11.6', f'expected CUDA 11.6, got {torch.version.cuda}'; print(f'torch {torch.__version__}, CUDA {torch.version.cuda}, cuDNN {torch.backends.cudnn.version()}')"
 
 CMD ["bash"]
