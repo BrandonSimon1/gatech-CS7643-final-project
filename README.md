@@ -73,6 +73,32 @@ pip install -r requirements.txt
 bash scripts/setup-pretrained-symlink.sh
 ```
 
+## Results
+
+Best top-1 accuracy on CIFAR-100, 300 epochs. Training artifacts (logs, checkpoints, TensorBoard events) are kept outside the repo to keep it lean. Partial — the runs below are what's completed so far.
+
+### PAT distillation
+
+| Job | Teacher → Student | Best Acc@1 (EMA) | Best epoch | Final Acc@1 (raw / EMA) |
+|---|---|---:|---:|---:|
+| `pat_swin-resnet18` | swin_tiny → resnet18 | **80.35** | 283 | 78.91 / 80.18 |
+| `pat_convnext-resmlp12` | convnext_tiny → resmlp_12_224 | **81.05** | 296 | 80.88 / 80.97 |
+| `pat_convnext-swin_p` | convnext_tiny → swin_pico | **78.88** | 291 | 78.71 / 78.76 |
+
+### Standalone baselines (no distillation)
+
+| Model | Best Acc@1 | Final Acc@1 (raw / EMA) |
+|---|---:|---:|
+| `resmlp_12_224` | **77.00** | 76.56 / 76.17 |
+| `swin_pico_patch4_window7_224` | **74.54** | 74.41 / 72.44 |
+
+### Distillation lift (paired)
+
+| Student | Standalone | PAT | Δ |
+|---|---:|---:|---:|
+| `resmlp_12_224` (vs convnext_tiny teacher) | 77.00 | 81.05 | **+4.05** |
+| `swin_pico_patch4_window7_224` (vs convnext_tiny teacher) | 74.54 | 78.88 | **+4.34** |
+
 ## Training
 
 Two pipelines, same hyperparameters, same five student models:
